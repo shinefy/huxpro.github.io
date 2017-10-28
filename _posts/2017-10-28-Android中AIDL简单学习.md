@@ -74,6 +74,7 @@ public class Binder implements IBinder {
 	 
 	 
 	 //我们在构造Stub(即下面的DownloadManagerImpl)时，调用了native的init方法，将该Binder注册到系统中。
+	 //貌似BinderProxy的代理相关代码好像也是在这里...猜测...因为java层我找不到
 	 public Binder() {
         init();  
         ...
@@ -95,6 +96,9 @@ public class Binder implements IBinder {
         return r;
     }
     
+    
+        
+    
 	//Default implementation is a stub that returns false.
 	protected boolean onTransact(int code, Parcel data, Parcel reply,
             int flags) throws RemoteException {
@@ -110,8 +114,37 @@ public class Binder implements IBinder {
         }
         return false;
     }
+    
 }
 ```
+
+```java
+//源码
+final class BinderProxy implements IBinder {
+
+	//Client端proxy调用了transact方法，实际上调用了BinderProxy的transact方法
+    public boolean transact(int code, Parcel data, Parcel reply, int flags) throws RemoteException {
+        Binder.checkParcel(this, code, data, "Unreasonably large binder buffer");
+        ...
+        try {
+            return transactNative(code, data, reply, flags);
+        } finally {
+            if (tracingEnabled) {
+                Trace.traceEnd(Trace.TRACE_TAG_ALWAYS);
+            }
+        }
+    }
+    
+    //transactNative方法会通过NDK和底层通信
+        public native boolean transactNative(int code, Parcel data, Parcel reply,
+            int flags) throws RemoteException;
+
+
+}
+```
+
+
+
 ```java
 //源码
 public interface IInterface
@@ -184,22 +217,7 @@ public class DownloadManagerImpl extends Binder implements IDownloadManager{
         }  
     }
     
-    //Client端proxy调用了transact方法，调用了native的transactNative方法
-    public boolean transact(int code, Parcel data, Parcel reply, int flags) throws RemoteException {
-        Binder.checkParcel(this, code, data, "Unreasonably large binder buffer");
-        ...
-        try {
-            return transactNative(code, data, reply, flags);
-        } finally {
-            if (tracingEnabled) {
-                Trace.traceEnd(Trace.TRACE_TAG_ALWAYS);
-            }
-        }
-    }
     
-    //transactNative方法会通过NDK和底层通信
-        public native boolean transactNative(int code, Parcel data, Parcel reply,
-            int flags) throws RemoteException;
 	
 }
 
@@ -295,7 +313,7 @@ private ServiceConnection serviceConnection = new ServiceConnection() {
 
 ```
 
-一个我瞎画的类似UML的关系图：
+一个我瞎画的类似UML的关系图（忽略了BinderProxy类）：
 ![Binder](http://pics-markdown.oss-cn-hangzhou.aliyuncs.com/Binder.png)
 
 
